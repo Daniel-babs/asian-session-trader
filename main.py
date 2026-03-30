@@ -508,6 +508,73 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   /* ── Scrollbar ── */
   ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* ── Alert Popup Overlay ── */
+  .popup-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.55);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    animation: fadeIn 0.2s ease;
+  }
+  .popup-overlay.show { display: flex; }
+  @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+
+  .popup-box {
+    border-radius: 16px;
+    padding: 40px 48px;
+    text-align: center;
+    max-width: 420px;
+    width: 90%;
+    box-shadow: 0 8px 48px rgba(0,0,0,0.6);
+    animation: popIn 0.25s cubic-bezier(.175,.885,.32,1.275);
+    position: relative;
+  }
+  @keyframes popIn { from{transform:scale(0.8);opacity:0} to{transform:scale(1);opacity:1} }
+
+  .popup-box.sell { background: #3d0a0a; border: 2px solid #f85149; }
+  .popup-box.buy  { background: #0a2e14; border: 2px solid #3fb950; }
+
+  .popup-emoji  { font-size: 3.5rem; margin-bottom: 12px; line-height: 1; }
+  .popup-action { font-size: 2rem; font-weight: 800; margin-bottom: 8px; letter-spacing: 0.03em; }
+  .popup-box.sell .popup-action { color: #ff7b72; }
+  .popup-box.buy  .popup-action { color: #56d364; }
+
+  .popup-asset  { font-size: 1.1rem; color: rgba(255,255,255,0.75); margin-bottom: 6px; }
+  .popup-tf     { font-size: 0.82rem; color: rgba(255,255,255,0.45); margin-bottom: 24px; }
+
+  .popup-dismiss {
+    padding: 10px 28px; border-radius: 8px; border: none;
+    font-size: 0.9rem; font-weight: 700; cursor: pointer; transition: 0.15s;
+  }
+  .popup-box.sell .popup-dismiss { background: #f85149; color: #fff; }
+  .popup-box.sell .popup-dismiss:hover { background: #ff7b72; }
+  .popup-box.buy  .popup-dismiss { background: #3fb950; color: #000; }
+  .popup-box.buy  .popup-dismiss:hover { background: #56d364; }
+
+  .popup-close {
+    position: absolute; top: 12px; right: 16px;
+    background: none; border: none; color: rgba(255,255,255,0.4);
+    font-size: 1.2rem; cursor: pointer; line-height: 1;
+  }
+  .popup-close:hover { color: rgba(255,255,255,0.8); }
+
+  /* ── Breach popup (smaller, top-right toast style) ── */
+  .toast-container {
+    position: fixed; top: 20px; right: 20px;
+    z-index: 999; display: flex; flex-direction: column; gap: 10px;
+  }
+  .toast {
+    padding: 12px 18px; border-radius: 10px; font-size: 0.85rem;
+    font-weight: 600; box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    animation: slideIn 0.3s ease; max-width: 300px;
+    border: 1px solid;
+  }
+  .toast.sell-toast { background: #2d0c0c; border-color: #f85149; color: #ff9492; }
+  .toast.buy-toast  { background: #0c2416; border-color: #3fb950; color: #7ee787; }
+  @keyframes slideIn { from{transform:translateX(120%);opacity:0} to{transform:translateX(0);opacity:1} }
 </style>
 </head>
 <body>
@@ -608,6 +675,21 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 
 </div><!-- /container -->
 
+<!-- ── CONFIRMATION POPUP ─────────────────────────────────── -->
+<div class="popup-overlay" id="confirmPopup">
+  <div class="popup-box" id="popupBox">
+    <button class="popup-close" onclick="dismissPopup()">✕</button>
+    <div class="popup-emoji"  id="popupEmoji">🔴</div>
+    <div class="popup-action" id="popupAction">SELL NOW</div>
+    <div class="popup-asset"  id="popupAsset">GBP/USD</div>
+    <div class="popup-tf"     id="popupTf">Confirmed on 5M · Asian High swept</div>
+    <button class="popup-dismiss" onclick="dismissPopup()">Got it — dismiss</button>
+  </div>
+</div>
+
+<!-- ── BREACH TOASTS ──────────────────────────────────────── -->
+<div class="toast-container" id="toastContainer"></div>
+
 <script>
 // ── DST display update ───────────────────────────────────────────────────────
 function updateWindow() {
@@ -629,6 +711,52 @@ function updateWindow() {
   }
 }
 
+// ── Popup: confirmation alert ─────────────────────────────────────────────────
+function showConfirmPopup(asset, direction, tf, breachType) {
+  const isSell  = direction === 'SELL';
+  const box     = document.getElementById('popupBox');
+  box.className = `popup-box ${isSell ? 'sell' : 'buy'}`;
+
+  document.getElementById('popupEmoji').textContent  = isSell ? '🔴' : '🟢';
+  document.getElementById('popupAction').textContent = isSell ? '⬇ SELL NOW' : '⬆ BUY NOW';
+  document.getElementById('popupAsset').textContent  = asset;
+  document.getElementById('popupTf').textContent     =
+    `Confirmed on ${tf} · Asian ${breachType === 'HIGH' ? 'High' : 'Low'} swept`;
+
+  document.getElementById('confirmPopup').classList.add('show');
+
+  // Play a short beep sound
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.frequency.value = isSell ? 440 : 660;
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(0.4, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
+    osc.start(); osc.stop(ctx.currentTime + 0.8);
+  } catch(e) {}
+}
+
+function dismissPopup() {
+  document.getElementById('confirmPopup').classList.remove('show');
+}
+
+// ── Toast: breach alert ───────────────────────────────────────────────────────
+function showBreachToast(asset, breachType) {
+  const isSell  = breachType === 'HIGH';
+  const toast   = document.createElement('div');
+  toast.className = `toast ${isSell ? 'sell-toast' : 'buy-toast'}`;
+  toast.innerHTML = `
+    ${isSell ? '🔴' : '🟢'} <strong>${asset}</strong> — Asian ${isSell ? 'High' : 'Low'} breached<br>
+    <span style="font-weight:400;opacity:0.8">Watching for ${isSell ? 'SELL' : 'BUY'} confirmation…</span>
+  `;
+  const container = document.getElementById('toastContainer');
+  container.appendChild(toast);
+  setTimeout(() => { toast.style.transition='opacity 0.5s'; toast.style.opacity='0'; setTimeout(()=>toast.remove(), 500); }, 7000);
+}
+
 // ── Start / Stop ─────────────────────────────────────────────────────────────
 async function startMonitor() {
   const assets = Array.from(document.getElementById('assetSelect').selectedOptions).map(o => o.value);
@@ -648,6 +776,8 @@ async function startMonitor() {
   const data = await res.json();
 
   if (data.success) {
+    seenBreaches      = {};
+    seenConfirmations = {};
     document.getElementById('startBtn').disabled = true;
     document.getElementById('stopBtn').disabled  = false;
     document.getElementById('statusDot').classList.add('active');
@@ -663,6 +793,8 @@ async function stopMonitor() {
   document.getElementById('stopBtn').disabled  = true;
   document.getElementById('statusDot').classList.remove('active');
   document.getElementById('statusText').textContent = 'Stopped';
+  seenBreaches      = {};
+  seenConfirmations = {};
 }
 
 // ── Render asset cards ───────────────────────────────────────────────────────
@@ -704,6 +836,10 @@ function renderAssets(session_data) {
   }).join('');
 }
 
+// ── Track seen events to avoid re-triggering on every poll ───────────────────
+let seenBreaches      = {};   // { "GBP/USD": true }
+let seenConfirmations = {};   // { "GBP/USD": true }
+
 // ── Poll status ──────────────────────────────────────────────────────────────
 async function poll() {
   try {
@@ -714,6 +850,20 @@ async function poll() {
     document.getElementById('phaseLabel').textContent  = data.phase || '—';
 
     renderAssets(data.session_data || {});
+
+    // ── Check for new breaches → toast notification
+    Object.entries(data.session_data || {}).forEach(([asset, d]) => {
+      if (d.breach_type && d.breach_alert_sent && !seenBreaches[asset]) {
+        seenBreaches[asset] = true;
+        showBreachToast(asset, d.breach_type);
+      }
+      // ── Check for new confirmations → full popup
+      if (d.confirmed && d.confirm_alert_sent && !seenConfirmations[asset]) {
+        seenConfirmations[asset] = true;
+        const direction = d.breach_type === 'HIGH' ? 'SELL' : 'BUY';
+        showConfirmPopup(asset, direction, d.confirmed_tf, d.breach_type);
+      }
+    });
 
     const box = document.getElementById('logBox');
     box.innerHTML = (data.logs || []).map(l =>
