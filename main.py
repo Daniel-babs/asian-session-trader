@@ -397,6 +397,16 @@ async def run_cycle(asset_sessions, dst_on, bot_token, chat_id):
 
 # ─── BACKGROUND THREAD ────────────────────────────────────────────────────────
 
+def all_windows_expired(asset_sessions, dst_on):
+    """Returns True when ALL sessions confirmation windows have closed for today."""
+    now_min = datetime.now(WAT).hour * 60 + datetime.now(WAT).minute
+    for session_name in set(asset_sessions.values()):
+        _, ce = get_confirm_window(session_name, dst_on)
+        if now_min < ce:
+            return False
+    return True
+
+
 def monitoring_loop(asset_sessions, dst_on, bot_token, chat_id):
     summary = ", ".join(f"{a} ({s})" for a, s in asset_sessions.items())
     log(f"Monitoring started | {summary} | DST: {'ON (BST)' if dst_on else 'OFF (GMT)'}", "info")
@@ -409,7 +419,17 @@ def monitoring_loop(asset_sessions, dst_on, bot_token, chat_id):
                 loop.run_until_complete(run_cycle(asset_sessions, dst_on, bot_token, chat_id))
             except Exception as e:
                 log(f"Cycle error: {e}", "error")
-            stop_event.wait(timeout=60)
+
+            # Auto-stop when all confirmation windows have closed for the day
+            if all_windows_expired(asset_sessions, dst_on):
+                log("All session windows closed — auto-stopping for today.", "info")
+                with state_lock:
+                    app_state["running"] = False
+                    app_state["phase"]   = "Session complete for today. Restart tomorrow."
+                stop_event.set()
+                break
+
+            stop_event.wait(timeout=5)  # 5s poll — Stop button is near-instant
     finally:
         loop.close()
         log("Monitoring stopped", "info")
@@ -838,6 +858,18 @@ async function poll() {
     document.getElementById("currentTime").textContent = data.current_time_wat;
     document.getElementById("phaseLabel").textContent  = data.phase||"Idle";
     renderAssets(data.session_data||{});
+
+    // Sync button state with server — handles auto-stop
+    const isRunning = data.running;
+    document.getElementById("startBtn").disabled = isRunning;
+    document.getElementById("stopBtn").disabled  = !isRunning;
+    if (!isRunning) {
+      document.getElementById("statusDot").classList.remove("active");
+      if (document.getElementById("statusText").textContent === "Monitoring active...") {
+        document.getElementById("statusText").textContent = "Stopped";
+      }
+    }
+
     Object.entries(data.session_data||{}).forEach(([asset,d])=>{
       if (d.breach_type && d.breach_alert_sent && !seenBreaches[asset]) {
         seenBreaches[asset]=true;
@@ -852,7 +884,7 @@ async function poll() {
     box.innerHTML=(data.logs||[]).map(l=>`<div class="l-${l.type}">[${l.time}] ${l.msg}</div>`).join("");
     box.scrollTop=box.scrollHeight;
   } catch(e){}
-  setTimeout(poll, 8000);
+  setTimeout(poll, 5000);
 }
 
 // Init with 2 default rows
@@ -873,8 +905,15 @@ def index():
 @app.route("/start", methods=["POST"])
 def start():
     global monitor_thread
-    if app_state["running"]:
-        return jsonify({"success": False, "error": "Already running"})
+    # If already running, force-stop cleanly before starting new session
+    if app_state["running"] or (monitor_thread and monitor_thread.is_alive()):
+        stop_event.set()
+        if monitor_thread and monitor_thread.is_alive():
+            monitor_thread.join(timeout=8)  # wait up to 8s for thread to die
+        with state_lock:
+            app_state["running"] = False
+        stop_event.clear()
+        log("Previous session force-stopped to start new one.", "info")
 
     data           = flask_request.get_json()
     asset_sessions = data.get("asset_sessions", {})
@@ -910,9 +949,13 @@ def start():
 
 @app.route("/stop", methods=["POST"])
 def stop():
+    global monitor_thread
     stop_event.set()
     with state_lock:
         app_state["running"] = False
+    if monitor_thread and monitor_thread.is_alive():
+        monitor_thread.join(timeout=8)
+    stop_event.clear()  # reset so next Start works cleanly
     return jsonify({"success": True})
 
 
