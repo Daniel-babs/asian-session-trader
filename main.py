@@ -63,6 +63,11 @@ SYMBOL_MAP = {
     "US Tech 100": "OTC_NDX",
 }
 
+# Pre-configured credentials (set as Railway environment variables)
+# TELEGRAM_TOKEN and TELEGRAM_CHAT_ID — never hardcode in source
+DEFAULT_BOT_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
+DEFAULT_CHAT_ID   = os.environ.get("TELEGRAM_CHAT_ID", "")
+
 # Session definitions — times in minutes from midnight WAT
 # Asian confirm window is dynamic (DST-dependent), injected at runtime
 SESSION_WINDOWS = {
@@ -906,6 +911,23 @@ async function poll() {
 // Init with 2 default rows
 addAssetRow("GBP/USD","Asian");
 addAssetRow("AUD/USD","London");
+
+// Auto-fill Telegram credentials from server env vars
+(async () => {
+  try {
+    const res  = await fetch("/credentials");
+    const creds = await res.json();
+    if (creds.bot_token) {
+      document.getElementById("botToken").value = creds.bot_token;
+      document.getElementById("botToken").placeholder = "Pre-filled from server";
+    }
+    if (creds.chat_id) {
+      document.getElementById("chatId").value = creds.chat_id;
+      document.getElementById("chatId").placeholder = "Pre-filled from server";
+    }
+  } catch(e) {}
+})();
+
 poll();
 </script>
 </body>
@@ -973,6 +995,15 @@ def stop():
         monitor_thread.join(timeout=8)
     stop_event.clear()  # reset so next Start works cleanly
     return jsonify({"success": True})
+
+
+@app.route("/credentials")
+def credentials():
+    """Returns pre-configured credentials so the frontend can pre-fill the form."""
+    return jsonify({
+        "bot_token": DEFAULT_BOT_TOKEN,
+        "chat_id":   DEFAULT_CHAT_ID,
+    })
 
 
 @app.route("/status")
