@@ -440,7 +440,12 @@ def monitoring_loop(asset_sessions, dst_on, bot_token, chat_id):
                 stop_event.set()
                 break
 
-            stop_event.wait(timeout=5)  # 5s poll — Stop button is near-instant
+            # Wait 60s before next API cycle, but wake every 5s to check stop signal
+            # This keeps Deriv API calls at 60s intervals while Stop button stays responsive
+            for _ in range(12):
+                if stop_event.is_set():
+                    break
+                stop_event.wait(timeout=5)
     finally:
         loop.close()
         log("Monitoring stopped", "info")
