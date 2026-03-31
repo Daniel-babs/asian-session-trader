@@ -36,20 +36,31 @@ WAT           = timezone(timedelta(hours=1))
 
 SYMBOL_MAP = {
     "AUD/USD": "frxAUDUSD",
-    "GBP/USD": "frxGBPUSD",
-    "EUR/USD": "frxEURUSD",
-    "EUR/GBP": "frxEURGBP",
-    "USD/JPY": "frxUSDJPY",
-    "GBP/JPY": "frxGBPJPY",
-    "NZD/USD": "frxNZDUSD",
-    "USD/CAD": "frxUSDCAD",
-    "GBP/AUD": "frxGBPAUD",
-    "GBP/NZD": "frxGBPNZD",
-    "EUR/JPY": "frxEURJPY",
-    "USD/CHF": "frxUSDCHF",
-    "EUR/CAD": "frxEURCAD",
+    "AUD/NZD": "frxAUDNZD",
     "AUD/JPY": "frxAUDJPY",
-    "XAU/USD": "frxXAUUSD",
+    "AUD/CHF": "frxAUDCHF",
+    "AUD/CAD": "frxAUDCAD",
+    "EUR/USD": "frxEURUSD",
+    "EUR/AUD": "frxEURAUD",
+    "EUR/CAD": "frxEURCAD",
+    "EUR/CHF": "frxEURCHF",
+    "EUR/GBP": "frxEURGBP",
+    "EUR/JPY": "frxEURJPY",
+    "EUR/NZD": "frxEURNZD",
+    "GBP/USD": "frxGBPUSD",
+    "GBP/AUD": "frxGBPAUD",
+    "GBP/CAD": "frxGBPCAD",
+    "GBP/CHF": "frxGBPCHF",
+    "GBP/JPY": "frxGBPJPY",
+    "GBP/NZD": "frxGBPNZD",
+    "NZD/USD": "frxNZDUSD",
+    "NZD/CAD": "frxNZDCAD",
+    "NZD/CHF": "frxNZDCHF",
+    "NZD/JPY": "frxNZDJPY",
+    "USD/CAD": "frxUSDCAD",
+    "USD/JPY": "frxUSDJPY",
+    "US SP 500": "OTC_SPX",
+    "US Tech 100": "OTC_NDX",
 }
 
 # Session definitions — times in minutes from midnight WAT
@@ -712,7 +723,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <div class="toast-container" id="toastContainer"></div>
 
 <script>
-const ASSETS   = ["AUD/USD","GBP/USD","EUR/USD","EUR/GBP","USD/JPY","GBP/JPY","NZD/USD","USD/CAD","GBP/AUD","GBP/NZD","EUR/JPY","USD/CHF","EUR/CAD","AUD/JPY","XAU/USD"];
+const ASSETS   = ["AUD/USD","AUD/NZD","AUD/JPY","AUD/CHF","AUD/CAD","EUR/USD","EUR/AUD","EUR/CAD","EUR/CHF","EUR/GBP","EUR/JPY","EUR/NZD","GBP/USD","GBP/AUD","GBP/CAD","GBP/CHF","GBP/JPY","GBP/NZD","NZD/USD","NZD/CAD","NZD/CHF","NZD/JPY","USD/CAD","USD/JPY","US SP 500","US Tech 100"];
 const SESSIONS = ["Asian","London","New York AM"];
 const SESS_COLOR = { "Asian":"active-asian", "London":"active-london", "New York AM":"active-ny" };
 const SESS_TAG   = { "Asian":"tag-asian",    "London":"tag-london",    "New York AM":"tag-ny" };
